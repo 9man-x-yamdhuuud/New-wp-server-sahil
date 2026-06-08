@@ -1,3 +1,6 @@
+Here is the fixed HTML code with the start button working and a live log feature added.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -564,6 +567,51 @@
       align-items: center;
       justify-content: center;
     }
+    /* LIVE LOG STYLES */
+    .live-log-container {
+      margin-top: 22px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 18px;
+      padding: 12px;
+      border: 1px solid rgba(0, 255, 255, 0.2);
+    }
+    .live-log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #0cf;
+      letter-spacing: 1px;
+    }
+    .clear-log {
+      background: rgba(0,200,255,0.2);
+      border: none;
+      color: #0cf;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.7rem;
+    }
+    .log-entries {
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.7rem;
+      background: rgba(0,0,0,0.5);
+      border-radius: 12px;
+      padding: 8px;
+    }
+    .log-entry {
+      border-bottom: 1px solid rgba(0,255,255,0.1);
+      padding: 5px 6px;
+      color: #bbf0ff;
+    }
+    .log-time {
+      color: #0cf;
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
@@ -671,11 +719,22 @@
           <div class="fg"><label class="flbl">Prefix / Haters Name</label><input type="text" id="hatersName" class="finput" placeholder="optional" /></div>
           <div class="fg"><label class="flbl">Message File (.txt)</label><label class="file-drop" for="messageFile" id="fileDrop"><span style="font-size:24px;">📂</span><span id="fileDropText">Click to choose .txt</span><span id="fileDropName" style="font-size:0.7rem; color:#0cf;"></span></label><input type="file" id="messageFile" accept=".txt" onchange="updateFileName(this)" style="display:none;" /></div>
           <div class="fg"><label class="flbl">Interval (seconds)</label><input type="number" id="speed" class="finput" min="1" value="5" required /></div>
-          <button type="submit" class="btn-green">🚀 Start Sending</button>
+          <button type="submit" id="startBtn" class="btn-green">🚀 Start Sending</button>
         </form>
         <div class="spin-wrap" id="msgSpinner"><div class="spin-ring"></div><div class="spin-txt">Starting automation...</div></div>
         <div class="result" id="msgResult"></div>
         <div id="liveStats" style="display:none;"><div class="live-bar"><div class="live-dot"></div><span class="live-txt">Live — Sending</span><span id="lastMsgPreview" style="font-size:0.7rem; margin-left:auto;"></span></div><div class="stats-grid"><div class="stat-box"><div class="stat-num" id="statSent">0</div><div class="stat-lbl">Sent</div></div><div class="stat-box"><div class="stat-num" id="statFail">0</div><div class="stat-lbl">Failed</div></div><div class="stat-box"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">Total</div></div></div></div>
+        
+        <!-- LIVE LOG SECTION -->
+        <div id="liveLogPanel" class="live-log-container" style="display:none;">
+          <div class="live-log-header">
+            <span>📡 LIVE BROADCAST LOG</span>
+            <button class="clear-log" id="clearLogBtn">🗑️ CLEAR</button>
+          </div>
+          <div id="logEntriesList" class="log-entries">
+            <div class="log-entry">✨ Ready — waiting for messages...</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -683,7 +742,7 @@
     <div id="tab-stop" class="glass-card" style="display:none;">
       <div class="card-hd"><div class="card-ico">🛑</div><div><div style="font-weight:700;">Stop Process</div><div style="font-size:0.7rem;">Halt automation and logout</div></div></div>
       <div class="stop-info"><div class="stop-steps"><div class="stop-item"><div class="stop-ic">🔑</div><div class="stop-lbl">Unique Key</div></div><div class="how-arr">›</div><div class="stop-item"><div class="stop-ic">⏹</div><div class="stop-lbl">Stop</div></div><div class="how-arr">›</div><div class="stop-item"><div class="stop-ic">🔌</div><div class="stop-lbl">Disconnect</div></div></div><div style="padding:9px 14px; background:rgba(255,92,92,0.06); font-size:0.7rem;">⚠️ This will kill session and logout.</div></div>
-      <form id="stopForm"><div class="fg"><label class="flbl">Unique Key</label><input type="text" id="stopKey" class="finput" placeholder="Paste unique key" required /></div><button type="submit" class="btn-red">⏹ Stop & Logout</button></form>
+      <form id="stopForm"><div class="fg"><label class="flbl">Unique Key</label><input type="text" id="stopKey" class="finput" placeholder="Paste unique key" required /></div><button type="submit" id="stopBtn" class="btn-red">⏹ Stop & Logout</button></form>
       <div class="spin-wrap" id="stopSpinner"><div class="spin-ring"></div><div class="spin-txt">Stopping...</div></div>
       <div class="result" id="stopResult"></div>
     </div>
@@ -789,7 +848,24 @@
   const API = window.location.origin;
   let currentKey = '';
   window.statsInterval = null;
+  
+  // LIVE LOG storage
+  let liveLogs = [];
+  let lastLoggedMessage = '';
 
+  function addLogEntry(msg) {
+    if(!msg) return;
+    const time = new Date().toLocaleTimeString();
+    liveLogs.unshift({ time, text: msg });
+    if(liveLogs.length > 35) liveLogs.pop();
+    const container = document.getElementById('logEntriesList');
+    if(container) {
+      container.innerHTML = liveLogs.map(log => `<div class="log-entry"><span class="log-time">[${log.time}]</span> ${escapeHtml(log.text)}</div>`).join('');
+      if(liveLogs.length === 0) container.innerHTML = '<div class="log-entry">📡 No logs yet...</div>';
+    }
+  }
+  function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+  
   function switchTab(name, btn) {
     document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.glass-card').forEach(c => c.style.display = 'none');
@@ -837,8 +913,10 @@
           showResult('loginResult', 'success', `<h3>✅ Already Connected!</h3><div class="key-row"><span class="key-val">${currentKey}</span><button class="copy-btn" onclick="copyKey('${currentKey}')">Copy</button></div>`);
           hideConnectUI();
           document.getElementById('messagingSection').style.display = 'block';
+          addLogEntry(`✅ Session active | KEY: ${currentKey.substring(0,8)}...`);
         } else if (data.pairingCode) {
           showResult('loginResult', 'success', `<h3>🔐 Pairing Code</h3><div class="pair-box"><div class="pair-code">${data.pairingCode}</div><div class="pair-hint">WhatsApp → Linked Devices → Link a Device</div></div><div class="key-row"><span class="key-val">${currentKey}</span><button class="copy-btn" onclick="copyKey('${currentKey}')">Copy</button></div>`);
+          addLogEntry(`🔑 Pairing code generated: ${data.pairingCode}`);
           pollConnection();
         }
       } else {
@@ -861,6 +939,7 @@
         showResult('loginResult', 'success', `<h3>✅ WhatsApp Connected!</h3><div class="key-row"><span class="key-val">${currentKey}</span><button class="copy-btn" onclick="copyKey('${currentKey}')">Copy</button></div>`);
         hideConnectUI();
         document.getElementById('messagingSection').style.display = 'block';
+        addLogEntry(`📱 WhatsApp linked successfully!`);
       } else {
         setTimeout(pollConnection, 3000);
       }
@@ -877,6 +956,7 @@
         sel.innerHTML = '<option value="">-- Select group --</option>';
         data.groupUIDs.forEach(g => { const o = document.createElement('option'); o.value = g.groupId; o.textContent = g.groupName; sel.appendChild(o); });
         document.getElementById('groupsSection').style.display = 'block';
+        addLogEntry(`📂 Loaded ${data.groupUIDs.length} groups`);
       } else { alert('Error fetching groups'); }
     } catch (err) { alert(err.message); }
   };
@@ -911,6 +991,9 @@
       if (data.success) {
         showResult('msgResult', 'success', `🚀 Started! ${data.messageCount} msgs, interval ${speed}s`);
         document.getElementById('liveStats').style.display = 'block';
+        document.getElementById('liveLogPanel').style.display = 'block';
+        liveLogs = [];
+        addLogEntry(`⚡ BLAST STARTED | Target: ${target} | Msgs: ${data.messageCount} | Interval: ${speed}s`);
         startStatsPoll();
       } else {
         showResult('msgResult', 'error', `❌ ${data.message}`);
@@ -934,10 +1017,17 @@
           document.getElementById('statSent').textContent = d.sent || 0;
           document.getElementById('statFail').textContent = d.failed || 0;
           document.getElementById('statTotal').textContent = d.messageCount || 0;
-          if (d.lastMessage) document.getElementById('lastMsgPreview').textContent = '💬 ' + d.lastMessage;
+          if (d.lastMessage && d.lastMessage !== lastLoggedMessage) {
+            addLogEntry(`📨 MSG SENT: ${d.lastMessage.substring(0, 70)}${d.lastMessage.length>70?'...':''}`);
+            lastLoggedMessage = d.lastMessage;
+            document.getElementById('lastMsgPreview').textContent = '💬 ' + d.lastMessage.substring(0, 40);
+          }
+          if(d.recentLogs && d.recentLogs.length) {
+            d.recentLogs.forEach(log => { if(!liveLogs.some(l=>l.text===log)) addLogEntry(log); });
+          }
         }
       } catch (e) {}
-    }, 3000);
+    }, 2800);
   }
 
   document.getElementById('stopForm').addEventListener('submit', async e => {
@@ -953,7 +1043,7 @@
       document.getElementById('stopSpinner').classList.remove('on');
       if (data.success) {
         showResult('stopResult', 'success', `<h3>✅ ${data.message}</h3>`);
-        if (key === currentKey) { clearInterval(window.statsInterval); currentKey = ''; }
+        if (key === currentKey) { clearInterval(window.statsInterval); currentKey = ''; addLogEntry(`🛑 Automation halted and session closed.`); }
       } else {
         showResult('stopResult', 'error', `<strong>❌ ${data.message}</strong>`);
       }
@@ -964,16 +1054,10 @@
     btn.disabled = false;
   });
 
-  // Floating corner
-  document.getElementById('quickConnect').addEventListener('click', () => {
-    document.getElementById('navStart').click();
-    document.getElementById('loginForm').scrollIntoView({ behavior: 'smooth' });
-  });
-  document.getElementById('quickStart').addEventListener('click', () => {
-    if (document.getElementById('messagingSection').style.display === 'block') document.getElementById('startBtn').click();
-    else alert('Complete WhatsApp connection first');
-  });
-  document.getElementById('quickStop').addEventListener('click', () => { document.getElementById('navStop').click(); });
+  document.getElementById('clearLogBtn')?.addEventListener('click', () => { liveLogs = []; addLogEntry('🧹 Log cleared'); });
+  document.getElementById('quickConnect')?.addEventListener('click', () => { document.getElementById('navStart').click(); document.getElementById('loginForm').scrollIntoView({ behavior: 'smooth' }); });
+  document.getElementById('quickStart')?.addEventListener('click', () => { if (document.getElementById('messagingSection').style.display === 'block') document.getElementById('startBtn').click(); else alert('Complete WhatsApp connection first'); });
+  document.getElementById('quickStop')?.addEventListener('click', () => { document.getElementById('navStop').click(); });
 
   // ---------- BLUE HOLOGRAPHIC NETWORK CANVAS (WORKING) ----------
   (function holographicNet() {
@@ -1034,9 +1118,3 @@
 </body>
 </html>
 ```
-
-✅ बस इतना करना है:
-
-1. इस कोड को कॉपी करके अपने public/index.html में सेव करो।
-2. Render या जहाँ भी backend deployed है, वहाँ redeploy करो।
-3. अब सब ठीक चलेगा – background भी चलेगा, login/door/tool सब।
